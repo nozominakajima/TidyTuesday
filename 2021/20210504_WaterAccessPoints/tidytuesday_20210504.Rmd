@@ -1,0 +1,142 @@
+---
+title: "Tidy Tuesday: Water Access Points"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+author: "Nozomi Nakajima"
+output: html_output
+editor_options: 
+  chunk_output_type: console
+---
+
+The data this week comes from [Water Point Data Exchange](https://data.waterpointdata.org/dataset/Water-Point-Data-Exchange-WPDx-Basic-/jfkt-jmqa). Note that the data is limited to some core columns as the full dataset is ~300 Mb. Also data is largely filtered down to African sources.
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+# load libraries
+library(tidyverse)
+library(tidytuesdayR)
+library(scales)
+library(countrycode)
+library(ggthemes)
+library(ggmap)
+library (gganimate)
+
+# set theme
+theme_set(theme_light())
+
+# set working directory
+setwd("~/Documents/GitHub/TidyTuesday/2021/20210504_WaterAccessPoints")
+
+```
+
+
+Load weekly data:
+
+```{r load, include = TRUE}
+tt <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-04/water.csv')
+
+```
+
+Data exploration:
+
+```{r, include = TRUE}
+water <- tt
+
+# check types of water source
+water %>% 
+  count(water_source, sort = TRUE)
+
+# check water install year
+water %>% count(install_year) %>%
+  ggplot(aes(install_year, n)) +
+  geom_col()
+
+# some years look like transcription errors
+water %>% 
+  filter(install_year > 2021) %>%
+  View()
+
+# check country names
+water %>%
+  count(country_name, sort = TRUE) %>%
+  View()
+  ## mostly African countries
+
+```
+
+
+Prepare data for analysis:
+
+```{r, include = TRUE}
+
+water <- tt %>% 
+  rename(lat = lat_deg,
+         lon = lon_deg,
+         country = country_name) %>%
+  mutate(install_year = ifelse(install_year > 2021, NA, install_year)) %>%
+  mutate(water_source = fct_lump(water_source, 4)) %>%
+  ## fct_lump keeps most common (specified here as 5) 
+  ## and lumps other categories as "other"
+  replace_na(list(water_source = "Other")) %>% 
+  filter(!country %in% c("Peru", "Timor-Leste", "Dominican Republic"), 
+         !is.na(country)) %>%
+  filter(between(lat, -35, 37),
+         between(lon, -40, 60))
+
+```
+
+Make map of Africa:
+
+
+```{r}
+
+# create map data of african countries only
+africa_map_data <- map_data("world") %>% 
+  ## take the map_data world map
+  as_tibble() %>%
+  ## make it a tibble
+  mutate(continent = countrycode(region, "country.name", "continent")) %>%
+  ## create var continent using countrycode package
+  filter(continent == "Africa")
+
+# plot water source on map
+water %>%
+  filter(!is.na(install_year)) %>%
+  #sample_n(500) %>%
+  mutate(install_year = pmax(1990, install_year)) %>%
+  mutate(year = map(install_year, ~ seq(., 2021))) %>%
+  unnest(year) %>%
+  ggplot(aes(lon, lat, color = water_source)) +
+  geom_polygon(aes(long, lat, group = group), 
+               ## variable "group" in africa_map_data is country id
+               color = "white",
+               ## color is the outline of polygon
+               fill = "grey20",
+               ## fill is the filled color of polygon
+               size = .2,
+               ## thickness of polygon
+               data = africa_map_data) +
+  geom_point(size = .5, alpha = .25) + 
+  ## make points small
+  scale_color_brewer(palette="Dark2", 
+                      ## use dark2 color palette
+                     guide = guide_legend(override.aes = list(size = 2, alpha = 1))) +
+                      ## adjust legend marker size and transparency
+  theme_map() +
+  theme(plot.title = element_text(size = 30, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 20, hjust = 0.5),
+        plot.caption = element_text(size = 8),
+        legend.title=element_text(size=12),
+        legend.text = element_text(size = 10),
+        text = element_text(family="Times", face="bold")) +
+  labs(x = NULL, y = NULL,
+       title = "Water Points in Africa", 
+       subtitle = "in {current_frame}",
+       color = "type of water source",
+       caption="Data from Water Point Data Exchange | Plot by @nozominaka for #TidyTuesday") +
+    transition_manual(year)
+
+anim_save("WaterAccessPoints_plot.gif")  
+```
+
