@@ -2,7 +2,7 @@
 title: "Tidy Tuesday: Water Access Points"
 date: '`r format(Sys.time(), "%d %B, %Y")`'
 author: "Nozomi Nakajima"
-output: html_output
+output: html_document
 editor_options: 
   chunk_output_type: console
 ---
