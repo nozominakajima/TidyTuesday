@@ -16,13 +16,20 @@ The data this week comes from [Microsoft](https://github.com/microsoft/USBroadba
 knitr::opts_chunk$set(echo = TRUE)
 
 # load libraries
+library(tidyr)
+library(dplyr)
 library(tidyverse)
+library(stringr)
 library(scales)
 library(countrycode)
 library(ggthemes)
 library(ggmap)
 library(gganimate)
 library(zipcodeR)
+library(tigris)
+library(tidycensus)
+library(readxl)
+library(janitor)
 
 # set theme
 theme_set(theme_light())
@@ -36,13 +43,364 @@ setwd("~/Documents/GitHub/TidyTuesday/2021/20210511_InternetAccess")
 Load weekly data:
 
 ```{r load, echo = FALSE}
-broadband <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-11/broadband.csv')
+bb <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-11/broadband.csv') %>% 
+  janitor::clean_names() %>% 
+    ## makes all lower case
+  rename(state = st) %>%
+  mutate(state = state.name[match(state, state.abb)]) %>%
+          ## R has state.name and state.abb vectors
+  mutate(state = ifelse(is.na(state), "District of Columbia", state),
+          ## if missing state, then DC, otherwise keep state 
+         broadband_availability_per_fcc = parse_number(broadband_availability_per_fcc, na = "-"),
+          ## change to numeric broadband_availability_per_fcc
+          ## some missing is coded with - so replace those as na
+         broadband_usage = parse_number(broadband_usage, na = "-")) %>%
+    mutate(county = paste0(str_remove(county_name, " County$"), ", ", state),
+          ## new var county removes the word "county" at the end of each label
+          ## add , and state name to the label 
+         county = fct_reorder(county, broadband_availability_per_fcc),
+          ## reorder the new var county by population size
+         county_id = sprintf("%05d", county_id))
+          ## fix this so it matches with county_sf shape file
+          
+bbz <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-11/broadband_zip.csv') %>%
+  janitor::clean_names() %>% 
+  rename(state = st) %>%
+  mutate(state = state.name[match(state, state.abb)]) %>%
+  mutate(state = ifelse(is.na(state), "District of Columbia", state)) %>%
+  mutate(county = paste0(str_remove(county_name, " County$"), ", ", state),
+         postal_code = sprintf("%05d", postal_code))
+          ## sprintf formats number with fixed width; specify adding leading 0s to ensure 5 digits
+  
+```
+
+
+```{r load, echo = FALSE}
+
+# can take census data using tidycensus (but this  needs api)
+
+# read in using downloaded csv file from: https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html
+
+county_pop <- read_excel("~/Documents/GitHub/TidyTuesday/2021/20210511_InternetAccess/co-est2019-annres.xlsx", skip = 3) %>%
+  select(county = ...1, population_2017 = '2017',
+         population_2019 = '2019') %>% 
+  separate(county, c("county_name", "state"), sep = ", ") %>%
+  mutate(county_name = str_remove(county_name, "^\\."))
+  ## start of string is ^ regular expression is \\
+
+# check merge
+bb %>% 
+  left_join(county_pop, by = c("county_name", "state")) %>%
+  filter(is.na(population_2017)) 
+  # four countie with missing population in 2017
+
+# merge two data sets using inner_join
+bb_with_pop <- bb %>% 
+  inner_join(county_pop, by = c("county_name", "state")) 
+
+# let's look at 25 most populated counties
+bb_with_pop %>%
+  arrange(desc(population_2017)) %>% 
+  head(25) %>%
+  mutate(county = fct_reorder(county, population_2017)) %>%
+  ggplot(aes(population_2017, county)) +
+  geom_col()
+  
+# let's look at bb availability in 25 most populated counties
+bb_with_pop %>%
+  arrange(desc(population_2017)) %>% 
+  head(40) %>%
+  mutate(county = fct_reorder(county, broadband_availability_per_fcc)) %>%
+    ## order by bb availability
+  ggplot(aes(broadband_availability_per_fcc, county)) +
+  geom_point() +
+  scale_x_continuous(labels = percent_format())
+    ## display x axis as a percent
+
+# relationship between population and broadband availability
+bb_with_pop %>%
+  filter(population_2017 >= 30000 ) %>%
+    ## filter to larger counties
+  ggplot(aes(population_2017, broadband_availability_per_fcc)) +
+  geom_point() +
+  geom_text(aes(label = county), 
+            check_overlap = TRUE, vjust = 1, hjust = 1) +
+              # only first plot will be plotted (in order of bb availability, then pop)
+  scale_x_log10(labels = comma_format()) +
+    ## display x axis population in log scale
+  scale_y_continuous(labels = percent_format()) +
+    ## display y axis as a percent  
+  expand_limits(x = 10000) +
+    ## moves the x-axis to start at 10,000 so we can see the county labels
+  labs(y = "Broadband availability in 2017",
+       x = "Population in 2017")
+
+# relationship between population and broadband usage
+bb_with_pop %>%
+  filter(population_2019 >= 1000 ) %>%
+    ## filter to large counties
+  ggplot(aes(population_2019, broadband_usage)) +
+  geom_point() +
+  geom_text(aes(label = county), 
+            check_overlap = TRUE, vjust = 1, hjust = 1) +
+              # only first plot will be plotted (in order of bb availability, then pop)
+  geom_smooth(method = "lm") +
+  scale_x_log10(labels = comma_format()) +
+    ## display x axis population in log scale
+  scale_y_continuous(labels = percent_format()) +
+    ## display y axis as a percent  
+  expand_limits(x = 10000) +
+    ## moves the x-axis to start at 10,000 so we can see the county labels
+  labs(y = "Broadband usage in 2019",
+       x = "Population in 2019")
+
 
 ```
 
-Data exploration:
+
+Zip code data: 
 
 ```{r, include = TRUE}
- 
+
+# from the zipcode R package: 
+as_tibble(zip_code_db)
+
+
+# merge bbz with zipcode file
+bbz_zip_join <- bbz %>% 
+  inner_join(zip_code_db %>% 
+               select(-state, -county), ## filter out state and country from zip_code_db so we use the ones from bbz
+             by = c(postal_code = "zipcode") )
+            ## var joining by is postal_code in bbz and zipcode in zip_code_db
+
+
+# broadband usage by population density 
+bbz_zip_join %>%
+  filter(population >= 10000) %>%
+    ## only look at zipcodes with at least 10,000 people
+  ggplot(aes(population_density, broadband_usage)) +
+  geom_point() +
+  scale_x_log10(labels = comma_format()) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Persons per square mile",
+       y = "Broadband usage in 2019")
+
+# is population density bimodal? a bit.
+bbz_zip_join %>%
+  ggplot(aes(population_density)) +
+  geom_histogram() +
+  scale_x_log10()
+
+# plot for biggest states
+bbz_zip_join %>%
+  count(state, sort = T)
+
+# plot for largest states 
+bbz_zip_join %>%
+  filter(population >= 10000) %>%
+  filter(state %in% c("Texas", "Pennsylvania", "New York", "California")) %>%
+  ggplot(aes(population_density, broadband_usage)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ state) + 
+  scale_x_log10(labels = comma_format()) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Persons per square mile",
+       y = "Broadband usage in 2019")
+
+```
+
+
+Use tigris package to get shapefile
+
+```{r, include = TRUE}
+library(tigris)
+library(sf)
+
+# get us counties shapefile
+?counties()
+
+counties_sf <- counties() %>%
+  st_simplify(dTolerance = .03) 
+
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(GEOID = "county_id")) %>%
+  filter(!state %in% c("Alaska", "Hawaii")) %>%
+  ggplot() + 
+  geom_sf() +
+  theme_map() +
+  coord_sf()
+
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(GEOID = "county_id")) %>%
+  filter(!state %in% c("Alaska", "Hawaii")) %>%
+  ggplot(aes(fill = broadband_availability_per_fcc)) + 
+  geom_sf() +
+  scale_fill_continuous(labels = percent) +
+  theme_map() +
+  coord_sf()
+
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(GEOID = "county_id")) %>%
+  filter(!state %in% c("Alaska", "Hawaii")) %>%
+  ggplot(aes(fill = broadband_usage)) + 
+  geom_sf(size = .05) +
+    ## thickness of county borders
+  scale_fill_gradient2(labels = percent, low = "red", high = "blue",
+                       midpoint = .24) +
+    ## change scale
+  theme_map() +
+  coord_sf() +
+  labs(fill = "Broadband usage (%)")
+
+## set midpoint based on distribution of broadband usage
+bb_with_pop %>%
+  ggplot(aes(broadband_usage)) +
+  geom_histogram()
+
+median(bb_with_pop$broadband_usage, na.rm = TRUE)
+
+# reproducing the map from The Verge
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(GEOID = "county_id")) %>%
+  filter(!state %in% c("Alaska", "Hawaii")) %>%
+  ggplot(aes(fill = broadband_usage >= .15 )) + 
+  geom_sf(size = .05) +
+  scale_fill_manual(values = c("red", "grey")) +
+  theme_map() +
+  coord_sf() +
+  labs(fill = "Broadband usage (%)")
+
+# of population
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(GEOID = "county_id")) %>%
+  filter(!state %in% c("Alaska", "Hawaii")) %>%
+  ggplot(aes(fill = population_2019)) + 
+  geom_sf(size = .05) +
+    ## thickness of county borders
+  scale_fill_gradient2(low = "red", high = "blue",
+                       trans = "log10", ## transform scale to log10
+                       midpoint = 4.5) +
+  theme_map() +
+  coord_sf() +
+  labs(fill = "Population in 2019")
+
+
+# let's look at median income
+bbz_zip_join %>%
+  filter(population > 5000) %>%
+  ggplot(aes(median_household_income, broadband_usage)) +
+  geom_point() +
+  geom_smooth(method = "lm") + 
+  scale_x_log10()
+
+```
+
+
+Correlation by state:
+
+```{r, include = TRUE}
+
+## try geofacet package
+library(geofacet)
+
+bbz_zip_join %>%
+  filter(population >= 10000) %>%
+  ggplot(aes(median_household_income, broadband_usage)) +
+  geom_point(size = 0.05, alpha = 0.2) +
+  geom_smooth(method = "lm") +
+  facet_geo(~ state) + 
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Median Household Income ($)",
+       y = "Broadband usage in 2019")
+
+bbz_zip_join %>%
+  ggplot(aes(median_household_income)) +
+  geom_histogram()
+
+bbz_zip_join %>%
+  filter(population >= 10000) %>%
+  ggplot(aes(median_household_income, broadband_usage)) +
+  geom_point(size = 0.05, alpha = 0.2) +
+  geom_smooth(method = "lowess") +
+  facet_geo(~ state) + 
+  scale_x_log10(labels = comma_format()) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Median Household Income (log10)",
+       y = "Broadband usage in 2019")
+
+```
+
+
+
+```{r, include = TRUE} 
+library(urbnmapr)
+
+bb_with_pop %>%
+  count(state, sort = T) %>%
+  View()
+
+# let's plot alaska and hawaii too
+counties_sf <- get_urbn_map("counties", sf = TRUE)
+
+broadband_availability_per_fcc
+
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(county_fips = "county_id")) %>%
+  ggplot() + 
+  geom_sf(mapping = aes(fill = broadband_availability_per_fcc),
+          color = "#ffffff", size = .1) +
+  scale_fill_gradient2(labels = scales::percent,
+                       midpoint = median(bb_with_pop$broadband_availability_per_fcc, na.rm = TRUE)) +
+  theme_map() +
+  coord_sf() +
+  theme(legend.position="bottom",
+        title = element_text(family = "Times"),
+        plot.title = element_text(size = 26)) +
+  labs(title = "Access to the internet in the U.S.",
+       fill = "Broadband availability per fcc")
+
+```
+
+Adding fonts
+```{r, include = TRUE} 
+
+library(showtext)
+font_add_google(name = "Montserrat", family = "montserrat")
+  ## find google fonts: https://fonts.google.com/
+
+# turn on showtext to load the new font
+showtext_auto()
+
+
+library(ggdark)
+
+counties_sf %>%
+  inner_join(bb_with_pop, by = c(county_fips = "county_id")) %>%
+  ggplot() + 
+  geom_sf(mapping = aes(fill = broadband_availability_per_fcc),
+          color = "#ffffff", size = .1) +
+  scale_fill_gradient2(labels = scales::percent,
+                       midpoint = median(bb_with_pop$broadband_availability_per_fcc, na.rm = TRUE)) +
+  dark_theme_minimal() +
+  theme(plot.title = element_text(family = "codystar", size = 100, color = "white", hjust = 0.5),
+        plot.subtitle = element_text(family = "montserrat", size = 12, color = "white", hjust = 0.5),
+        plot.caption = element_text(family = "montserrat", size = 8, color = "white"),
+        legend.position="bottom",
+        legend.text = element_text(family = "montserrat", size = 8, color = "white"),
+        legend.title = element_text(family = "montserrat", size = 12, color = "white", hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = "Access to \n the internet",
+       subtitle = "\n Broadband availability is defined as the \n percent of people per county with access to \n fixed terrestrial broadband at speeds of \n 25 Mbps/3 Mbps as of the end of 2017",
+       fill = "Broadband availability",
+       caption = "Data: Microsoft | Plot: @nozominaka") 
+  
+ggsave(width = 18, height = 12, dpi = 320, filename = "map.png")
+
 ```
 
