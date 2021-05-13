@@ -401,7 +401,7 @@ counties_sf %>%
        fill = "Broadband availability",
        caption = "Data: Microsoft | Plot: @nozominaka") 
   
-ggsave(width = 18, height = 12, dpi = 320, filename = "InternetAcess_plot.png")
+ggsave(width = 18, height = 12, dpi = 320, filename = "InternetAccess_plot.png")
 
 ```
 
