@@ -92,7 +92,7 @@ county_pop <- read_excel("~/Documents/GitHub/TidyTuesday/2021/20210511_InternetA
 bb %>% 
   left_join(county_pop, by = c("county_name", "state")) %>%
   filter(is.na(population_2017)) 
-  # four countie with missing population in 2017
+  # four counties with missing population in 2017
 
 # merge two data sets using inner_join
 bb_with_pop <- bb %>% 
@@ -368,9 +368,10 @@ Adding fonts
 library(showtext)
 font_add_google(name = "Montserrat", family = "montserrat")
   ## find google fonts: https://fonts.google.com/
+font_add_google(name = "Codystar", family = "codystar")
 
-# turn on showtext to load the new font
 showtext_auto()
+  ## turn on showtext to load the new font
 
 
 library(ggdark)
@@ -386,7 +387,7 @@ counties_sf %>%
   theme(plot.title = element_text(family = "codystar", size = 100, color = "white", hjust = 0.5),
         plot.subtitle = element_text(family = "montserrat", size = 12, color = "white", hjust = 0.5),
         plot.caption = element_text(family = "montserrat", size = 8, color = "white"),
-        legend.position="bottom",
+        legend.position = "bottom",
         legend.text = element_text(family = "montserrat", size = 8, color = "white"),
         legend.title = element_text(family = "montserrat", size = 12, color = "white", hjust = 0.5),
         axis.title.x = element_blank(),
@@ -400,7 +401,7 @@ counties_sf %>%
        fill = "Broadband availability",
        caption = "Data: Microsoft | Plot: @nozominaka") 
   
-ggsave(width = 18, height = 12, dpi = 320, filename = "map.png")
+ggsave(width = 18, height = 12, dpi = 320, filename = "InternetAcess_plot.png")
 
 ```
 

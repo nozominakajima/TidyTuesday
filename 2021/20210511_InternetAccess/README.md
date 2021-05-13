@@ -1,1 +1,1 @@
-![InternetAccess_plot.gif](InternetAcess_plot.gif)
+![InternetAccess_plot.png](InternetAcess_plot.png)
