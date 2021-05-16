@@ -343,7 +343,6 @@ bb_with_pop %>%
 # let's plot alaska and hawaii too
 counties_sf <- get_urbn_map("counties", sf = TRUE)
 
-broadband_availability_per_fcc
 
 counties_sf %>%
   inner_join(bb_with_pop, by = c(county_fips = "county_id")) %>%
@@ -384,11 +383,12 @@ counties_sf %>%
   scale_fill_gradient2(labels = scales::percent,
                        midpoint = median(bb_with_pop$broadband_availability_per_fcc, na.rm = TRUE)) +
   dark_theme_minimal() +
-  theme(plot.title = element_text(family = "codystar", size = 100, color = "white", hjust = 0.5),
+  theme(plot.title = element_text(family = "codystar", size = 80, color = "white", hjust = 0.5, 
+                                  margin=margin(t=10, r=0, b=0, l=0)),
         plot.subtitle = element_text(family = "montserrat", size = 12, color = "white", hjust = 0.5),
-        plot.caption = element_text(family = "montserrat", size = 8, color = "white"),
+        plot.caption = element_text(family = "montserrat", size = 12, color = "white"),
         legend.position = "bottom",
-        legend.text = element_text(family = "montserrat", size = 8, color = "white"),
+        legend.text = element_text(family = "montserrat", size = 9, color = "white"),
         legend.title = element_text(family = "montserrat", size = 12, color = "white", hjust = 0.5),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
@@ -398,10 +398,14 @@ counties_sf %>%
         axis.ticks.y = element_blank()) +
   labs(title = "Access to \n the internet",
        subtitle = "\n Broadband availability is defined as the \n percent of people per county with access to \n fixed terrestrial broadband at speeds of \n 25 Mbps/3 Mbps as of the end of 2017",
-       fill = "Broadband availability",
+       fill = "Broadband availability in U.S. counties",
        caption = "Data: Microsoft | Plot: @nozominaka") 
   
 ggsave(width = 18, height = 12, dpi = 320, filename = "InternetAccess_plot.png")
+
+# crop white space around the png
+knitr::plot_crop("InternetAccess_plot.png")
+
 
 ```
 
