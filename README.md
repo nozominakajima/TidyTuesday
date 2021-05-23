@@ -10,5 +10,6 @@ https://github.com/rfordatascience/tidytuesday/
 
 | Week | Date | Data | Source | Plot & link to code |
 | :---: | :----: | :--- | :--- | :---: |
+| 21 | `2021-05-18` | [Ask A Manager](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-18/readme.md) | [Ask A Manager](https://www.askamanager.org/2021/05/some-findings-from-24000-peoples-salaries.html) | <a href="2021/20210518_AskAManager/tidytuesday_20210518.R"> <img src="2021/20210518_AskAManager/AskAManager_plot.png" width="400"></a>|
 | 20 | `2021-05-11` | [Internet Access](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-11/readme.md) | [Microsoft](https://github.com/microsoft/USBroadbandUsagePercentages) | <a href="2021/20210511_InternetAccess/tidytuesday_20210511.Rmd"> <img src="2021/20210511_InternetAccess/InternetAccess_plot.png" width="400"></a>|
 | 19 | `2021-05-04` | [Water Access Points](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-04/readme.md) | [wpdx](https://www.waterpointdata.org/) | <a href="2021/20210504_WaterAccessPoints/tidytuesday_20210504.Rmd"> <img src="2021/20210504_WaterAccessPoints/WaterAccessPoints_plot.gif" width="400"></a>|
